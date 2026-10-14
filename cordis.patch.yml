@@ -1,0 +1,11 @@
+# OpenCode Go quota: one Host row serves the authenticated usage route and the
+# Client half renders the toolbar widget into the conversation composer.
+#
+# Optional row config (defaults in parentheses):
+#   apiKeyEnv       credential reference resolved per request (OPENCODE_GO_API_KEY)
+#   baseUrl         OpenCode origin (https://opencode.ai)
+#   refreshSeconds  upstream cache lifetime (45)
+#   timeoutMs       upstream request timeout (15000)
+- insert:
+    - id: opencode-go-quota
+      name: '@local/dsh-opencode-go-quota'
