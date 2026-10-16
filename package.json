@@ -3,8 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Shows how much of the OpenCode Go usage allowance is left (5-hour, weekly, monthly) in the composer toolbar.",
+  "description": "Show the remaining OpenCode Go usage allowance (5-hour, weekly, monthly) in the DeepSeek Harness composer toolbar.",
   "license": "MIT",
+  "author": "tatudrag0n",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tatudrag0n/dsh-opencode-go-quota.git"
+  },
+  "homepage": "https://github.com/tatudrag0n/dsh-opencode-go-quota#readme",
+  "bugs": {
+    "url": "https://github.com/tatudrag0n/dsh-opencode-go-quota/issues"
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -14,10 +23,20 @@
     "quota",
     "usage"
   ],
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
   "icon": "./icon.svg",
   "meta": {
-    "title": "OpenCode Go Quota",
-    "description": "Shows how much of the OpenCode Go usage allowance is left (5-hour, weekly, monthly) in the composer toolbar."
+    "title": "OpenCode Go 利用枠",
+    "description": "OpenCode Go の利用枠の残り（5時間・週間・月間）をコンポーザーのツールバーに表示します。"
   },
   "exports": {
     ".": "./index.js",
@@ -26,6 +45,9 @@
     "./locale/en.json": "./locale/en.json",
     "./locale/ja.json": "./locale/ja.json",
     "./icon.svg": "./icon.svg"
+  },
+  "scripts": {
+    "test": "node test/smoke.mjs"
   },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
