@@ -46,6 +46,16 @@ The chip and the bars change color with what is left: green above 50%, amber fro
 
 ## Install the plugin
 
+The shortest path installs straight from GitHub, with no clone:
+
+```text
+plugin_manager install_bundle  target: github:tatudrag0n/dsh-opencode-go-quota
+```
+
+Reload the DSH page afterwards. The chip appears on the left of the composer tool row.
+
+To install from a clone instead:
+
 1. Clone the repository.
 
 ```bash
@@ -65,7 +75,7 @@ For a manual install, add this row to the profile `cordis.patch.yml`.
 ```yaml
 - insert:
     - id: opencode-go-quota
-      name: '@local/dsh-opencode-go-quota'
+      name: 'dsh-opencode-go-quota'
 ```
 
 ### Set the API key
@@ -101,7 +111,7 @@ Add `config` to the bundle row. Every field is optional.
 
 ```yaml
 - id: opencode-go-quota
-  name: '@local/dsh-opencode-go-quota'
+  name: 'dsh-opencode-go-quota'
   config:
     refreshSeconds: 120
 ```
@@ -144,7 +154,7 @@ When a call fails, the widget keeps the last reading and labels it as the previo
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| No chip | The bundle is not enabled | Check that `@local/dsh-opencode-go-quota` is enabled in `plugin_manager` |
+| No chip | The bundle is not enabled | Check that `dsh-opencode-go-quota` is enabled in `plugin_manager` |
 | The chip reads `Go —` | The key is missing or refused | Follow [Set the API key](#set-the-api-key) above, then test with curl |
 | Numbers lag reality | The 45s cache is serving a stored response | Click refresh in the popover |
 | An edit does nothing | The host half loads at process start | Reinstall the bundle or restart DSH |
@@ -168,7 +178,9 @@ When a call fails, the widget keeps the last reading and labels it as the previo
 node test/smoke.mjs
 ```
 
-The suite runs 25 checks. With a key in the credential store it calls the live endpoint. Without one it verifies route registration and the no-key response.
+The suite runs 37 checks. With a key in the credential store it calls the live endpoint. Without one it verifies route registration and the no-key response. It also checks that the `package.json` name matches the registration id in `client.js` and the row name in `cordis.patch.yml`, and that every file listed in `files` exists.
+
+GitHub Actions runs the same suite on push and pull request, across Node.js 20 and 22 on Ubuntu and Windows.
 
 ## Reload after a change
 

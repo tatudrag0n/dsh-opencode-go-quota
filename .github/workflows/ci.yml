@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # The plugin has no dependencies, so there is nothing to install. The
+      # smoke test asserts the Host half against a stub context and skips the
+      # live upstream checks when no credential is present, which is the case
+      # on CI.
+      - name: Smoke test
+        run: node test/smoke.mjs
+
+      - name: Check the published file list resolves
+        run: node -e "const m=require('./package.json');const fs=require('fs');const missing=(m.files??[]).filter(f=>!f.includes('*')&&!fs.existsSync(f));if(missing.length){console.error('missing:',missing);process.exit(1)}console.log('files ok:',(m.files??[]).length)"

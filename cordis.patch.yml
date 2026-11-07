@@ -8,4 +8,4 @@
 #   timeoutMs       upstream request timeout (15000)
 - insert:
     - id: opencode-go-quota
-      name: '@local/dsh-opencode-go-quota'
+      name: 'dsh-opencode-go-quota'

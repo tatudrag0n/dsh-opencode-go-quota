@@ -10,7 +10,7 @@
  * (`api/opencode-go.quota`); the browser never holds the API key.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-opencode-go-quota',
+  id: 'dsh-opencode-go-quota',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

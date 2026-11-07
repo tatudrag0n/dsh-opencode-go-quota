@@ -46,6 +46,16 @@ DeepSeek Harness (DSH) の Web UI に、OpenCode Go の残り利用枠を表示�
 
 ## インストール
 
+いちばん簡単なのは、リポジトリを clone せずに GitHub から直接入れる方法です。
+
+```text
+plugin_manager install_bundle  target: github:tatudrag0n/dsh-opencode-go-quota
+```
+
+入れたあと DSH の画面を再読み込みすると、コンポーザー左側にチップが出ます。
+
+clone してから入れる場合は次のとおりです。
+
 1. リポジトリを clone します。
 
 ```bash
@@ -65,7 +75,7 @@ plugin_manager install_bundle  target: /path/to/dsh-opencode-go-quota
 ```yaml
 - insert:
     - id: opencode-go-quota
-      name: '@local/dsh-opencode-go-quota'
+      name: 'dsh-opencode-go-quota'
 ```
 
 ### API キー
@@ -101,7 +111,7 @@ curl -H "Authorization: Bearer $OPENCODE_GO_API_KEY" https://opencode.ai/zen/go/
 
 ```yaml
 - id: opencode-go-quota
-  name: '@local/dsh-opencode-go-quota'
+  name: 'dsh-opencode-go-quota'
   config:
     refreshSeconds: 120
 ```
@@ -144,7 +154,7 @@ Host 側が認証付きの GET ルート `/api/opencode-go.quota` を登録し�
 
 | 症状 | 原因の候補 | 対処 |
 |---|---|---|
-| チップが出ない | バンドルが有効になっていない | `plugin_manager` で `@local/dsh-opencode-go-quota` が有効か確認する |
+| チップが出ない | バンドルが有効になっていない | `plugin_manager` で `dsh-opencode-go-quota` が有効か確認する |
 | チップが `Go —` になる | キーが見つからない、または拒否された | 上の「API キー」を確認し、curl で試す |
 | 数字が実際と合わない | 45秒のキャッシュが効いている | ポップオーバーの「更新」を押す |
 | 編集が反映されない | Host 半分は起動時に読み込まれる | バンドルを入れ直すか、DSH を再起動する |
@@ -168,7 +178,9 @@ Host 側が認証付きの GET ルート `/api/opencode-go.quota` を登録し�
 node test/smoke.mjs
 ```
 
-25項目を確認します。資格情報ストアに鍵があれば、実際の API まで叩きます。鍵が無いときの対象はルート登録と「鍵なし」の応答です。
+37項目を確認します。資格情報ストアに鍵があれば、実際の API まで叩きます。鍵が無いときの対象はルート登録と「鍵なし」の応答です。あわせて、`package.json` の名前が `client.js` の登録 ID と `cordis.patch.yml` の行名に一致するか、`files` に挙げたファイルが実在するかも確認します。
+
+GitHub Actions は push と pull request で、Node.js 20 と 22、Ubuntu と Windows の組み合わせで同じテストを回します。
 
 ## 反映と再読み込み
 

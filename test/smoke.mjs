@@ -11,7 +11,7 @@
  *   node test/smoke.mjs
  *   OPENCODE_GO_API_KEY=oc_sk_... node test/smoke.mjs
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -159,6 +159,35 @@ if (key !== undefined) {
   }
 } else {
   console.log('\nSkip live upstream checks: no OPENCODE_GO_API_KEY and no stored credential.');
+}
+
+// The package name is what the client module system registers a bundle under
+// (`entry.id` is the package name), so a rename that leaves any of these three
+// places behind loads the bundle without registering it.
+const root = join(fileURLToPath(new URL('..', import.meta.url)));
+const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const clientSource = readFileSync(join(root, 'client.js'), 'utf8');
+const patchSource = readFileSync(join(root, 'cordis.patch.yml'), 'utf8');
+
+check('package is publishable (not private)', manifest.private !== true, String(manifest.private));
+check(
+  'client bundle registers the package name',
+  clientSource.includes(`id: '${manifest.name}'`),
+  `expected id: '${manifest.name}'`,
+);
+check(
+  'bundle patch row names the package',
+  patchSource.includes(`name: '${manifest.name}'`),
+  `expected name: '${manifest.name}'`,
+);
+check(
+  'manifest declares the bundle and client halves',
+  manifest.dsh?.bundle?.patch === './cordis.patch.yml' && manifest.dsh?.client?.platform === 'web',
+  JSON.stringify(manifest.dsh),
+);
+for (const file of manifest.files ?? []) {
+  const present = file.includes('*') || existsSync(join(root, file));
+  check(`published file exists: ${file}`, present, file);
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
