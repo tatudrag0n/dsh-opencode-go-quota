@@ -48,6 +48,11 @@ window.__ModuleLoader__.load({
         updated: 'Updated {clock}',
         stale: 'Showing the last known value.',
         'aria.details': 'Show OpenCode Go usage details',
+        'pin.title': 'Show in the chip',
+        'pin.auto': 'Tightest',
+        'pin.auto.hint': 'Report whichever window runs out first.',
+        'pin.manual.hint': 'Report the windows you pick, in this order.',
+        'pin.none': 'Pick at least one window.',
       },
       ja: {
         title: 'OpenCode Go 利用枠',
@@ -72,6 +77,11 @@ window.__ModuleLoader__.load({
         updated: '{clock} 更新',
         stale: '前回取得した値を表示しています。',
         'aria.details': 'OpenCode Go の利用枠の詳細を表示',
+        'pin.title': 'チップに表示する枠',
+        'pin.auto': '残りが最少',
+        'pin.auto.hint': '最初に尽きる枠を表示します。',
+        'pin.manual.hint': '選んだ枠をこの順で表示します。',
+        'pin.none': '枠を1つ以上選んでください。',
       },
     };
 
@@ -106,10 +116,66 @@ window.__ModuleLoader__.load({
 .oggq-error{margin-top:6px;color:var(--dsw-alias-state-error-primary);font-size:11px;overflow-wrap:anywhere}
 .oggq-foot{margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:11px}
 .oggq-empty{color:var(--dsw-alias-label-secondary);font-size:11px}
+.oggq-pin{margin-top:9px;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1)}
+.oggq-pin-title{display:block;color:var(--dsw-alias-label-secondary);font-size:11px}
+.oggq-pin-options{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.oggq-opt{padding:2px 8px;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:1.5;cursor:pointer}
+.oggq-opt:hover{background:var(--dsw-alias-bg-layer-2)}
+.oggq-opt:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.oggq-opt-on{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
+.oggq-pin-hint{display:block;margin-top:5px;color:var(--dsw-alias-label-secondary);font-size:11px}
 `;
 
     /** Locale service face captured at apply time; absent in a bare composition. */
     let localeFace;
+
+    /**
+     * Which windows the chip always shows. `auto` keeps the original
+     * behaviour (the tightest window); any other value is an ordered subset of
+     * WINDOW_ORDER that the user picked in the popover. The choice is a
+     * display preference, so it lives in localStorage next to DSH's own
+     * `dsh.*` keys and needs no Host round trip.
+     */
+    const VISIBLE_KEY = 'dsh.opencode-go-quota.visibleWindows';
+    const VISIBLE_DEFAULT = 'auto';
+
+    /** Read the stored preference, falling back to `auto` for anything unusable. */
+    function readVisiblePreference() {
+      let raw;
+      try {
+        raw = localStorage.getItem(VISIBLE_KEY);
+      } catch {
+        return VISIBLE_DEFAULT;
+      }
+      if (raw === null || raw === '') return VISIBLE_DEFAULT;
+      if (raw === VISIBLE_DEFAULT) return VISIBLE_DEFAULT;
+      const keys = raw.split(',').filter((key) => WINDOW_ORDER.includes(key));
+      const unique = WINDOW_ORDER.filter((key) => keys.includes(key));
+      return unique.length === 0 ? VISIBLE_DEFAULT : unique;
+    }
+
+    /** Persist the preference; a storage failure must not take the widget down. */
+    function writeVisiblePreference(value) {
+      try {
+        localStorage.setItem(VISIBLE_KEY, value === VISIBLE_DEFAULT ? VISIBLE_DEFAULT : value.join(','));
+      } catch {
+        // Private mode or a full quota: the in-memory choice still applies.
+      }
+    }
+
+    /** The windows the chip reports, in WINDOW_ORDER, given the preference. */
+    function visibleWindowsFor(measured, preference) {
+      if (preference === VISIBLE_DEFAULT) {
+        if (measured.length === 0) return [];
+        const tightest = measured.reduce((lowest, entry) =>
+          entry.remainingPercent < lowest.remainingPercent ? entry : lowest,
+        );
+        return [tightest];
+      }
+      return WINDOW_ORDER.filter((key) => preference.includes(key))
+        .map((key) => measured.find((entry) => entry.key === key))
+        .filter((entry) => entry !== undefined);
+    }
 
     function dictionaryFor(localeId) {
       const language = String(localeId ?? 'en').toLowerCase().split('-')[0];
@@ -204,6 +270,7 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = React.useState(false);
       const [anchor, setAnchor] = React.useState(null);
       const [now, setNow] = React.useState(() => Date.now());
+      const [visible, setVisible] = React.useState(readVisiblePreference);
       const [, setLocaleRevision] = React.useState(0);
       const chipRef = React.useRef(null);
       const popRef = React.useRef(null);
@@ -309,10 +376,12 @@ window.__ModuleLoader__.load({
 
       const windows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
       const measured = windows.filter((entry) => typeof entry?.remainingPercent === 'number');
+      const shown = visibleWindowsFor(measured, visible);
+      /** The window that drives the dot colour: the tightest of the ones on show. */
       const tightest =
-        measured.length === 0
+        shown.length === 0
           ? undefined
-          : measured.reduce((lowest, entry) => (entry.remainingPercent < lowest.remainingPercent ? entry : lowest));
+          : shown.reduce((lowest, entry) => (entry.remainingPercent < lowest.remainingPercent ? entry : lowest));
 
       const loading = snapshot === null;
       const failed = snapshot !== null && snapshot.ok !== true;
@@ -321,9 +390,11 @@ window.__ModuleLoader__.load({
 
       const chipText = loading
         ? 'Go …'
-        : failed || tightest === undefined
+        : failed || shown.length === 0
           ? 'Go —'
-          : `${t('window.' + tightest.key + '.short')} ${formatNumber(tightest.remainingPercent)}%`;
+          : shown
+              .map((entry) => `${t('window.' + entry.key + '.short')} ${formatNumber(entry.remainingPercent)}%`)
+              .join(' · ');
 
       const chipTitle = loading
         ? t('title') + ' — ' + t('loading')
@@ -348,6 +419,62 @@ window.__ModuleLoader__.load({
         setOpen(true);
         if (snapshot === null || Date.now() - loadedAtRef.current > FRESH_MS) void load(true);
       };
+
+      /**
+       * Switch the chip to `auto`, or toggle one window on or off. Turning the
+       * last window off returns to `auto` rather than leaving the chip blank,
+       * so the control can never produce an empty chip.
+       */
+      const chooseVisible = (key) => {
+        let next;
+        if (key === VISIBLE_DEFAULT) {
+          next = VISIBLE_DEFAULT;
+        } else {
+          const current = visible === VISIBLE_DEFAULT ? [] : visible;
+          const toggled = current.includes(key)
+            ? current.filter((entry) => entry !== key)
+            : [...current, key];
+          next = toggled.length === 0 ? VISIBLE_DEFAULT : WINDOW_ORDER.filter((entry) => toggled.includes(entry));
+        }
+        setVisible(next);
+        writeVisiblePreference(next);
+      };
+
+      const pinned = visible === VISIBLE_DEFAULT ? [] : visible;
+
+      const picker = h(
+        'div',
+        { className: 'oggq-pin' },
+        h('span', { className: 'oggq-pin-title' }, t('pin.title')),
+        h(
+          'div',
+          { className: 'oggq-pin-options', role: 'group', 'aria-label': t('pin.title') },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'oggq-opt' + (visible === VISIBLE_DEFAULT ? ' oggq-opt-on' : ''),
+              'aria-pressed': visible === VISIBLE_DEFAULT ? 'true' : 'false',
+              onClick: () => chooseVisible(VISIBLE_DEFAULT),
+            },
+            t('pin.auto'),
+          ),
+          WINDOW_ORDER.map((key) =>
+            h(
+              'button',
+              {
+                type: 'button',
+                key,
+                className: 'oggq-opt' + (pinned.includes(key) ? ' oggq-opt-on' : ''),
+                'aria-pressed': pinned.includes(key) ? 'true' : 'false',
+                onClick: () => chooseVisible(key),
+              },
+              t('window.' + key + '.short'),
+            ),
+          ),
+        ),
+        h('span', { className: 'oggq-pin-hint' }, visible === VISIBLE_DEFAULT ? t('pin.auto.hint') : t('pin.manual.hint')),
+      );
 
       const rows = windows.map((entry) => {
         const remaining = typeof entry.remainingPercent === 'number' ? entry.remainingPercent : undefined;
@@ -411,6 +538,7 @@ window.__ModuleLoader__.load({
               windows.length === 0
                 ? h('div', { className: 'oggq-empty' }, loading ? t('loading') : t('error.title'))
                 : rows,
+              picker,
               errorMessage === undefined ? null : h('div', { className: 'oggq-error' }, errorMessage),
               stale ? h('div', { className: 'oggq-note' }, t('stale')) : null,
               fetchedAt === undefined ? null : h('div', { className: 'oggq-foot' }, t('updated', { clock: formatClock(fetchedAt) })),

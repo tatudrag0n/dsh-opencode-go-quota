@@ -38,6 +38,19 @@ Each window has its own cap. OpenCode documents the 5-hour window as 20% of the 
 
 The chip and the bars change color with what is left: green above 50%, amber from 20% to 50%, red at or below 20%.
 
+## Choose what the chip shows
+
+The bottom of the popover has a "Show in the chip" row. It starts on Tightest, which reports only the window that will run out first.
+
+Press Tightest to go back to that. Press the 5h, wk, or mo button to pin that window to the chip. Pinning more than one shows them in 5-hour, weekly, monthly order.
+
+```text
+[Tightest] [5h] [wk] [mo]
+chip: 5h 86% · mo 85%
+```
+
+The choice is stored in the browser's `localStorage` under `dsh.opencode-go-quota.visibleWindows`, so it survives a reload. Turning the last window off returns to Tightest, so the chip is never empty.
+
 ## Requirements
 
 - A DSH web profile, because the plugin uses the `connection` service.
@@ -178,7 +191,7 @@ When a call fails, the widget keeps the last reading and labels it as the previo
 node test/smoke.mjs
 ```
 
-The suite runs 37 checks. With a key in the credential store it calls the live endpoint. Without one it verifies route registration and the no-key response. It also checks that the `package.json` name matches the registration id in `client.js` and the row name in `cordis.patch.yml`, and that every file listed in `files` exists.
+The suite runs 49 checks. With a key in the credential store it calls the live endpoint. Without one it verifies route registration and the no-key response. It also checks that the `package.json` name matches the registration id in `client.js` and the row name in `cordis.patch.yml`, and that every file listed in `files` exists.
 
 GitHub Actions runs the same suite on push and pull request, across Node.js 20 and 22 on Ubuntu and Windows.
 

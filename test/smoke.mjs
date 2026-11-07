@@ -190,6 +190,172 @@ for (const file of manifest.files ?? []) {
   check(`published file exists: ${file}`, present, file);
 }
 
+// --- Client half: the window picker -----------------------------------------
+// client.js registers itself through window.__ModuleLoader__, so a stub loader
+// captures the factory and lets the real code run under Node.
+const browserSource = readFileSync(join(root, 'client.js'), 'utf8');
+const store = new Map();
+let clientModule;
+globalThis.window = {
+  __ModuleLoader__: {
+    load(registration) {
+      clientModule = registration.factory((name) => {
+        if (name !== 'react') throw new Error(`unexpected require: ${name}`);
+        return {
+          createElement: (type, props, ...children) => ({ type, props, children }),
+          Fragment: 'fragment',
+          useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+          useRef: (initial) => ({ current: initial }),
+          useCallback: (fn) => fn,
+          useEffect: () => {},
+        };
+      });
+    },
+  },
+  localStorage: {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+  },
+};
+globalThis.localStorage = globalThis.window.localStorage;
+// `navigator` is a getter-only global in Node, so it has to be defined.
+Object.defineProperty(globalThis, 'navigator', { value: { language: 'en' }, configurable: true });
+globalThis.document = { addEventListener() {}, removeEventListener() {}, visibilityState: 'visible' };
+globalThis.fetch = async () => {
+  throw new Error('network disabled in tests');
+};
+new Function(browserSource)();
+check('client bundle registers through the module loader', clientModule !== undefined);
+
+/** Reach the picker helpers through the registered module's apply(). */
+const clientApi = (() => {
+  const captured = {};
+  clientModule.apply({
+    locale: { register: () => () => {}, bind: () => (key) => key, subscribe: () => () => {} },
+    effect: (fn) => fn(),
+    slots: {
+      inject: (_slot, fn) => fn(),
+      register: (meta, component) => {
+        captured.meta = meta;
+        captured.component = component;
+        return () => {};
+      },
+    },
+  });
+  return captured;
+})();
+check('client registers the composer slot', clientApi.meta?.name === 'conversation.input.left');
+
+/**
+ * Render the widget with a stubbed React that records the element tree, then
+ * read the chip label and the pressed state of each picker option.
+ */
+function renderWidget(windows) {
+  // Seed the snapshot so the first render already carries data; the widget's
+  // own fetch is stubbed out below and never resolves.
+  const seeded = { ok: true, stale: false, fetchedAt: new Date(0).toISOString(), windows };
+  let stateIndex = 0;
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }),
+    Fragment: 'fragment',
+    useState: (initial) => {
+      // QuotaWidget's state order, so the first render has data and the popover
+      // open: snapshot, busy, open, anchor, now, visible, localeRevision.
+      const values = [seeded, false, true, { left: 0, bottom: 0 }, 0, undefined, 0];
+      const slot = stateIndex++;
+      const value = values[slot];
+      return [value === undefined ? (typeof initial === 'function' ? initial() : initial) : value, () => {}];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (fn) => fn,
+    useEffect: () => {},
+  };
+  const previousRequire = globalThis.window.__ModuleLoader__.load;
+  let factory;
+  globalThis.window.__ModuleLoader__.load = (registration) => {
+    factory = registration.factory;
+  };
+  new Function(browserSource)();
+  const mod = factory((name) => {
+    if (name !== 'react') throw new Error(`unexpected require: ${name}`);
+    return React;
+  });
+  globalThis.window.__ModuleLoader__.load = previousRequire;
+  let component;
+  mod.apply({
+    locale: { register: () => () => {}, bind: () => (key) => key, subscribe: () => () => {} },
+    effect: (fn) => fn(),
+    slots: { inject: (_slot, fn) => fn(), register: (_meta, c) => ((component = c), () => {}) },
+  });
+  // The widget fetches on mount; the stub fetch rejects, which the catch handles.
+  stateIndex = 0;
+  const tree = component();
+  const find = (node, predicate, out = []) => {
+    if (node === null || typeof node !== 'object') return out;
+    if (predicate(node)) out.push(node);
+    for (const child of node.children ?? []) {
+      if (Array.isArray(child)) for (const entry of child) find(entry, predicate, out);
+      else find(child, predicate, out);
+    }
+    return out;
+  };
+  const chip = find(tree, (n) => n.props?.className === 'oggq-chip')[0];
+  const label = find(chip, (n) => n.props?.className === 'oggq-chip-label')[0];
+  // The picker lives inside the popover, which only mounts when it is open;
+  // find it anywhere in the tree so the assertion does not depend on that.
+  const options = find(tree, (n) => typeof n.props?.className === 'string' && n.props.className.startsWith('oggq-opt'));
+  return {
+    chipText: label?.children?.[0],
+    pressed: options.filter((n) => n.props['aria-pressed'] === 'true').map((n) => n.children?.[0]),
+    optionCount: options.length,
+  };
+}
+
+const threeWindows = [
+  { key: 'rolling', remainingPercent: 86, usedPercent: 14, status: 'ok' },
+  { key: 'weekly', remainingPercent: 72, usedPercent: 28, status: 'ok' },
+  { key: 'monthly', remainingPercent: 85, usedPercent: 15, status: 'ok' },
+];
+
+store.clear();
+const autoView = renderWidget(threeWindows);
+check('default chip reports the tightest window', autoView.chipText === 'wk 72%', autoView.chipText);
+check('picker offers auto plus three windows', autoView.optionCount === 4, String(autoView.optionCount));
+check('picker starts on auto', JSON.stringify(autoView.pressed) === JSON.stringify(['Tightest']), JSON.stringify(autoView.pressed));
+
+store.set('dsh.opencode-go-quota.visibleWindows', 'rolling,monthly');
+const pinnedView = renderWidget(threeWindows);
+check(
+  'pinned windows render in WINDOW_ORDER, not stored order',
+  pinnedView.chipText === '5h 86% · mo 85%',
+  pinnedView.chipText,
+);
+check(
+  'pinned options are marked pressed',
+  JSON.stringify(pinnedView.pressed) === JSON.stringify(['5h', 'mo']),
+  JSON.stringify(pinnedView.pressed),
+);
+
+store.set('dsh.opencode-go-quota.visibleWindows', 'monthly');
+const singleView = renderWidget(threeWindows);
+check('a single pinned window shows alone', singleView.chipText === 'mo 85%', singleView.chipText);
+
+store.set('dsh.opencode-go-quota.visibleWindows', 'bogus,,weekly');
+const junkView = renderWidget(threeWindows);
+check('unknown keys are dropped, valid ones kept', junkView.chipText === 'wk 72%', junkView.chipText);
+
+store.set('dsh.opencode-go-quota.visibleWindows', 'bogus');
+const allJunkView = renderWidget(threeWindows);
+check('an unusable preference falls back to auto', allJunkView.chipText === 'wk 72%', allJunkView.chipText);
+
+store.set('dsh.opencode-go-quota.visibleWindows', 'rolling,weekly,monthly');
+const allView = renderWidget(threeWindows);
+check('all three pinned shows all three', allView.chipText.split(' · ').length === 3, allView.chipText);
+
+store.clear();
+const emptyView = renderWidget([]);
+check('no data still renders a chip', emptyView.chipText === 'Go —', emptyView.chipText);
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {
   console.log(`failed: ${failures.join(', ')}`);
