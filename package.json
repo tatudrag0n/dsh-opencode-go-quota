@@ -1,6 +1,6 @@
 {
   "name": "dsh-opencode-go-quota",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": false,
   "type": "module",
   "description": "Show the remaining OpenCode Go usage allowance (5-hour, weekly, monthly) in the DeepSeek Harness composer toolbar.",
